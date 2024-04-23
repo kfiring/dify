@@ -2,7 +2,12 @@ version: '3'
 services:
   # API service
   api:
-    image: langgenius/dify-api:0.6.4
+    build:
+      context: ../api
+      dockerfile: Dockerfile
+    image: gongjiang/dify-api
+    container_name: dify-api
+    # image: langgenius/dify-api:0.6.4
     restart: always
     environment:
       # Startup mode, 'api' starts the API server.
@@ -150,7 +155,12 @@ services:
   # worker service
   # The Celery worker for processing the queue.
   worker:
-    image: langgenius/dify-api:0.6.4
+    build:
+      context: ../api
+      dockerfile: Dockerfile
+    image: gongjiang/dify-api
+    container_name: dify-worker
+    # image: langgenius/dify-api:0.6.4
     restart: always
     environment:
       # Startup mode, 'worker' starts the Celery worker for processing the queue.
@@ -238,7 +248,12 @@ services:
 
   # Frontend web application.
   web:
-    image: langgenius/dify-web:0.6.4
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+    image: gongjiang/dify-web
+    container_name: dify-web
+    # image: langgenius/dify-web:0.6.4
     restart: always
     environment:
       EDITION: SELF_HOSTED
@@ -259,6 +274,7 @@ services:
   # The postgres database.
   db:
     image: postgres:15-alpine
+    container_name: dify-pgsql
     restart: always
     environment:
       PGUSER: postgres
@@ -282,6 +298,7 @@ services:
   # The redis cache.
   redis:
     image: redis:6-alpine
+    container_name: dify-redis
     restart: always
     volumes:
       # Mount the redis data directory to the container.
@@ -297,6 +314,7 @@ services:
   # The Weaviate vector store.
   weaviate:
     image: semitechnologies/weaviate:1.19.0
+    container_name: dify-weaviate
     restart: always
     volumes:
       # Mount the Weaviate data directory to the container.
@@ -321,6 +339,7 @@ services:
   # The DifySandbox
   sandbox:
     image: langgenius/dify-sandbox:latest
+    container_name: dify-sandbox
     restart: always
     cap_add:
     # Why is sys_admin permission needed?
@@ -351,6 +370,7 @@ services:
   # used for reverse proxying the API service and Web service.
   nginx:
     image: nginx:latest
+    container_name: dify-nginx
     restart: always
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf
