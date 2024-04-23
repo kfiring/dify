@@ -2,6 +2,7 @@
 FROM python:3.10-slim-bookworm AS base
 
 LABEL maintainer="takatost@gmail.com"
+COPY debian.sources.list /etc/apt/sources.list
 
 # install packages
 FROM base as packages
