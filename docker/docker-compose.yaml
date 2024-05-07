@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile
     image: gongjiang/dify-api
     container_name: dify-api
-    # image: langgenius/dify-api:0.6.5
+    # image: langgenius/dify-api:0.6.6
     restart: always
     environment:
       # Startup mode, 'api' starts the API server.
@@ -178,7 +178,7 @@ services:
       dockerfile: Dockerfile
     image: gongjiang/dify-api
     container_name: dify-worker
-    # image: langgenius/dify-api:0.6.5
+    # image: langgenius/dify-api:0.6.6
     restart: always
     environment:
       # Startup mode, 'worker' starts the Celery worker for processing the queue.
@@ -280,7 +280,7 @@ services:
       dockerfile: Dockerfile
     image: gongjiang/dify-web
     container_name: dify-web
-    # image: langgenius/dify-web:0.6.5
+    # image: langgenius/dify-web:0.6.6
     restart: always
     environment:
       # The base URL of console application api server, refers to the Console base URL of WEB service if console domain is
