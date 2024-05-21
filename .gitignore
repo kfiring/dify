@@ -154,7 +154,6 @@ sdks/python-client/dist
 sdks/python-client/dify_client.egg-info
 
 .vscode/*
-!.vscode/launch.json
 pyrightconfig.json
 
 api/core/model_runtime/model_providers/bedrock/llm/mistral.mistral-7b-instruct-v0:2.yaml
