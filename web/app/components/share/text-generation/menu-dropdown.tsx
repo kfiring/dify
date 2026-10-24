@@ -1,125 +1,150 @@
 'use client'
-import type { Placement } from '@floating-ui/react'
-import type { FC } from 'react'
+import type { DropdownMenuContentProps } from '@langgenius/dify-ui/dropdown-menu'
 import type { SiteInfo } from '@/models/share'
 import {
-  RiEqualizer2Line,
-} from '@remixicon/react'
-import { usePathname, useRouter } from 'next/navigation'
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroupLabel,
+  DropdownMenuItem,
+  DropdownMenuLinkItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@langgenius/dify-ui/dropdown-menu'
+import { IconButton } from '@langgenius/dify-ui/icon-button'
+import { useTheme } from 'next-themes'
 import * as React from 'react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import ActionButton from '@/app/components/base/action-button'
-import {
-  PortalToFollowElem,
-  PortalToFollowElemContent,
-  PortalToFollowElemTrigger,
-} from '@/app/components/base/portal-to-follow-elem'
-import ThemeSwitcher from '@/app/components/base/theme-switcher'
 import { useWebAppStore } from '@/context/web-app-context'
 import { AccessMode } from '@/models/access-control'
+import { usePathname, useRouter } from '@/next/navigation'
+import { resolveWebAppAddress } from '@/service/webapp-address'
 import { webAppLogout } from '@/service/webapp-auth'
-import { cn } from '@/utils/classnames'
-import Divider from '../../base/divider'
 import InfoModal from './info-modal'
 
-type Props = {
-  data?: SiteInfo
-  placement?: Placement
-  hideLogout?: boolean
-  forceClose?: boolean
-}
+type Props = Readonly<
+  Pick<DropdownMenuContentProps, 'side' | 'align'> & {
+    data?: SiteInfo
+    hideLogout?: boolean
+  }
+>
 
-const MenuDropdown: FC<Props> = ({
-  data,
-  placement,
-  hideLogout,
-  forceClose,
-}) => {
-  const webAppAccessMode = useWebAppStore(s => s.webAppAccessMode)
+function MenuDropdown({ data, side, align, hideLogout }: Props) {
+  const webAppAccessMode = useWebAppStore((s) => s.webAppAccessMode)
   const router = useRouter()
   const pathname = usePathname()
-  const { t } = useTranslation()
-  const [open, doSetOpen] = useState(false)
-  const openRef = useRef(open)
-  const setOpen = useCallback((v: boolean) => {
-    doSetOpen(v)
-    openRef.current = v
-  }, [doSetOpen])
+  const { t } = useTranslation(['common', 'share'])
 
-  const handleTrigger = useCallback(() => {
-    setOpen(!openRef.current)
-  }, [setOpen])
-
-  const shareCode = useWebAppStore(s => s.shareCode)
-  const handleLogout = useCallback(async () => {
-    await webAppLogout(shareCode!)
+  const handleLogout = async () => {
+    await webAppLogout(resolveWebAppAddress())
     router.replace(`/webapp-signin?redirect_url=${pathname}`)
-  }, [router, pathname, webAppLogout, shareCode])
+  }
 
+  const { theme, setTheme } = useTheme()
   const [show, setShow] = useState(false)
-
-  useEffect(() => {
-    if (forceClose)
-      setOpen(false)
-  }, [forceClose, setOpen])
+  const handleOpenInfoModal = () => {
+    queueMicrotask(() => {
+      setShow(true)
+    })
+  }
 
   return (
     <>
-      <PortalToFollowElem
-        open={open}
-        onOpenChange={setOpen}
-        placement={placement || 'bottom-end'}
-        offset={{
-          mainAxis: 4,
-          crossAxis: -4,
-        }}
-      >
-        <PortalToFollowElemTrigger onClick={handleTrigger}>
-          <div>
-            <ActionButton size="l" className={cn(open && 'bg-state-base-hover')}>
-              <RiEqualizer2Line className="h-[18px] w-[18px]" />
-            </ActionButton>
-          </div>
-        </PortalToFollowElemTrigger>
-        <PortalToFollowElemContent className="z-50">
-          <div className="w-[224px] rounded-xl border-[0.5px] border-components-panel-border bg-components-panel-bg-blur shadow-lg backdrop-blur-sm">
-            <div className="p-1">
-              <div className={cn('system-md-regular flex cursor-pointer items-center rounded-lg py-1.5 pl-3 pr-2 text-text-secondary')}>
-                <div className="grow">{t('theme.theme', { ns: 'common' })}</div>
-                <ThemeSwitcher />
-              </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <IconButton
+              aria-label={t(($) => $['operation.more'], { ns: 'common' })}
+              size="lg"
+              className="data-popup-open:bg-state-base-hover"
+            >
+              <span aria-hidden className="i-ri-equalizer-2-line h-4.5 w-4.5" />
+            </IconButton>
+          }
+        />
+        <DropdownMenuContent side={side} align={align} className="w-56">
+          <DropdownMenuRadioGroup
+            value={theme ?? 'system'}
+            onValueChange={setTheme}
+            className="flex items-center gap-2 px-3 system-md-regular text-text-secondary"
+          >
+            <DropdownMenuGroupLabel className="grow px-0 py-0 system-md-regular text-text-secondary normal-case">
+              {t(($) => $['theme.theme'], { ns: 'common' })}
+            </DropdownMenuGroupLabel>
+            <div className="flex items-center rounded-[10px] bg-components-segmented-control-bg-normal p-0.5">
+              {(['system', 'light', 'dark'] as const).map((value, index) => (
+                <React.Fragment key={value}>
+                  {index > 0 && (
+                    <div
+                      aria-hidden
+                      className={
+                        (index === 1 && theme === 'dark') ||
+                        (index === 2 && (theme ?? 'system') === 'system')
+                          ? 'h-3.5 w-px bg-divider-regular'
+                          : 'h-3.5 w-px bg-transparent'
+                      }
+                    />
+                  )}
+                  <DropdownMenuRadioItem
+                    value={value}
+                    aria-label={t(
+                      ($) =>
+                        $[
+                          value === 'system'
+                            ? 'theme.auto'
+                            : value === 'light'
+                              ? 'theme.light'
+                              : 'theme.dark'
+                        ],
+                      { ns: 'common' },
+                    )}
+                    className="mx-0 h-auto py-1 text-text-tertiary data-checked:bg-components-segmented-control-item-active-bg data-checked:text-text-accent-light-mode-only data-checked:shadow-sm data-highlighted:text-text-secondary data-checked:data-highlighted:bg-components-segmented-control-item-active-bg data-checked:data-highlighted:text-text-accent-light-mode-only"
+                  >
+                    <span aria-hidden className="p-0.5">
+                      <span
+                        className={
+                          value === 'system'
+                            ? 'i-ri-computer-line size-4'
+                            : value === 'light'
+                              ? 'i-ri-sun-line size-4'
+                              : 'i-ri-moon-line size-4'
+                        }
+                      />
+                    </span>
+                  </DropdownMenuRadioItem>
+                </React.Fragment>
+              ))}
             </div>
-            <Divider type="horizontal" className="my-0" />
-            <div className="p-1">
-              {data?.privacy_policy && (
-                <a href={data.privacy_policy} target="_blank" className="system-md-regular flex cursor-pointer items-center rounded-lg px-3 py-1.5 text-text-secondary hover:bg-state-base-hover">
-                  <span className="grow">{t('chat.privacyPolicyMiddle', { ns: 'share' })}</span>
-                </a>
-              )}
-              <div
-                onClick={() => {
-                  handleTrigger()
-                  setShow(true)
-                }}
-                className="system-md-regular cursor-pointer rounded-lg px-3 py-1.5 text-text-secondary hover:bg-state-base-hover"
-              >
-                {t('userProfile.about', { ns: 'common' })}
-              </div>
-            </div>
-            {!(hideLogout || webAppAccessMode === AccessMode.EXTERNAL_MEMBERS || webAppAccessMode === AccessMode.PUBLIC) && (
-              <div className="p-1">
-                <div
-                  onClick={handleLogout}
-                  className="system-md-regular cursor-pointer rounded-lg px-3 py-1.5 text-text-secondary hover:bg-state-base-hover"
-                >
-                  {t('userProfile.logout', { ns: 'common' })}
-                </div>
-              </div>
-            )}
-          </div>
-        </PortalToFollowElemContent>
-      </PortalToFollowElem>
+          </DropdownMenuRadioGroup>
+          <DropdownMenuSeparator />
+          {data?.privacy_policy && (
+            <DropdownMenuLinkItem
+              className="system-md-regular"
+              href={data.privacy_policy}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <span className="grow">
+                {t(($) => $['chat.privacyPolicyMiddle'], { ns: 'share' })}
+              </span>
+            </DropdownMenuLinkItem>
+          )}
+          <DropdownMenuItem className="system-md-regular" onClick={handleOpenInfoModal}>
+            {t(($) => $['userProfile.about'], { ns: 'common' })}
+          </DropdownMenuItem>
+          {!(
+            hideLogout ||
+            webAppAccessMode === AccessMode.EXTERNAL_MEMBERS ||
+            webAppAccessMode === AccessMode.PUBLIC
+          ) && (
+            <DropdownMenuItem className="system-md-regular" onClick={handleLogout}>
+              {t(($) => $['userProfile.logout'], { ns: 'common' })}
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
       {show && (
         <InfoModal
           isShow={show}

@@ -1,4 +1,5 @@
 import type { AvailableNodesMetaData } from '@/app/components/workflow/hooks-store/store'
+import { useAtomValue } from 'jotai'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { WORKFLOW_COMMON_NODES } from '@/app/components/workflow/constants/node'
@@ -7,52 +8,78 @@ import dataSourceDefault from '@/app/components/workflow/nodes/data-source/defau
 import knowledgeBaseDefault from '@/app/components/workflow/nodes/knowledge-base/default'
 import { BlockEnum } from '@/app/components/workflow/types'
 import { useDocLink } from '@/context/i18n'
+import { isAgentV2Enabled } from '@/features/agent-v2/feature-flag'
+import { knowledgeFsEnabledAtom } from '@/features/knowledge-fs-availability/state'
 
 export const useAvailableNodesMetaData = () => {
-  const { t } = useTranslation()
+  const { t } = useTranslation(['workflow'])
   const docLink = useDocLink()
+  const agentV2Enabled = isAgentV2Enabled()
+  const knowledgeFsEnabled = useAtomValue(knowledgeFsEnabledAtom)
 
-  const mergedNodesMetaData = useMemo(() => [
-    ...WORKFLOW_COMMON_NODES,
-    {
-      ...dataSourceDefault,
-      defaultValue: {
-        ...dataSourceDefault.defaultValue,
-        _dataSourceStartToAdd: true,
+  const mergedNodesMetaData = useMemo(
+    () => [
+      ...WORKFLOW_COMMON_NODES.filter(
+        (node) =>
+          node.metaData.type !== BlockEnum.HumanInput &&
+          (knowledgeFsEnabled || node.metaData.type !== BlockEnum.KnowledgeRetrievalV2) &&
+          (agentV2Enabled
+            ? node.metaData.type !== BlockEnum.Agent
+            : node.metaData.type !== BlockEnum.AgentV2),
+      ),
+      {
+        ...dataSourceDefault,
+        defaultValue: {
+          ...dataSourceDefault.defaultValue,
+          _dataSourceStartToAdd: true,
+        },
       },
-    },
-    knowledgeBaseDefault,
-    dataSourceEmptyDefault,
-  ], [])
+      knowledgeBaseDefault,
+      dataSourceEmptyDefault,
+    ],
+    [agentV2Enabled, knowledgeFsEnabled],
+  )
 
-  const helpLinkUri = useMemo(() => docLink(
-    '/use-dify/knowledge/knowledge-pipeline/knowledge-pipeline-orchestration',
-  ), [docLink])
+  const helpLinkUri = useMemo(
+    () => docLink('/use-dify/knowledge/knowledge-pipeline/knowledge-pipeline-orchestration'),
+    [docLink],
+  )
 
-  const availableNodesMetaData = useMemo(() => mergedNodesMetaData.map((node) => {
-    const { metaData } = node
-    const title = t(`blocks.${metaData.type}`, { ns: 'workflow' })
-    const description = t(`blocksAbout.${metaData.type}`, { ns: 'workflow' })
-    return {
-      ...node,
-      metaData: {
-        ...metaData,
-        title,
-        description,
-        helpLinkUri,
-      },
-      defaultValue: {
-        ...node.defaultValue,
-        type: metaData.type,
-        title,
-      },
-    }
-  }), [mergedNodesMetaData, t])
+  const availableNodesMetaData = useMemo(
+    () =>
+      mergedNodesMetaData.map((node) => {
+        const { metaData } = node
+        const title = t(($) => $[`blocks.${metaData.type}`], { ns: 'workflow' })
+        const description = t(($) => $[`blocksAbout.${metaData.type}`], { ns: 'workflow' })
+        return {
+          ...node,
+          metaData: {
+            ...metaData,
+            title,
+            description,
+            helpLinkUri,
+          },
+          defaultValue: {
+            ...node.defaultValue,
+            type: metaData.type === BlockEnum.AgentV2 ? BlockEnum.Agent : metaData.type,
+            title,
+          },
+        }
+      }),
+    [helpLinkUri, mergedNodesMetaData, t],
+  )
 
-  const availableNodesMetaDataMap = useMemo(() => availableNodesMetaData.reduce((acc, node) => {
-    acc![node.metaData.type] = node
-    return acc
-  }, {} as AvailableNodesMetaData['nodesMap']), [availableNodesMetaData])
+  const availableNodesMetaDataMap = useMemo(
+    () =>
+      availableNodesMetaData.reduce(
+        (acc, node) => {
+          acc![node.metaData.type] = node
+          return acc
+        },
+        {} as AvailableNodesMetaData['nodesMap'],
+      ),
+    [availableNodesMetaData],
+  )
 
   return useMemo(() => {
     return {

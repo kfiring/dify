@@ -1,230 +1,289 @@
 'use client'
-import { Menu, MenuButton, MenuItem, MenuItems, Transition } from '@headlessui/react'
+
+import type { ReactElement, ReactNode } from 'react'
+import type { Theme } from '@/app/components/base/theme-selector'
+import { Avatar, AvatarFallback, AvatarImage } from '@langgenius/dify-ui/avatar'
+import { cn } from '@langgenius/dify-ui/cn'
 import {
-  RiAccountCircleLine,
-  RiArrowRightUpLine,
-  RiBookOpenLine,
-  RiGithubLine,
-  RiGraduationCapFill,
-  RiInformation2Line,
-  RiLogoutBoxRLine,
-  RiMap2Line,
-  RiSettings3Line,
-  RiStarLine,
-  RiTShirt2Line,
-} from '@remixicon/react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { Fragment, useState } from 'react'
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLinkItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuRadioItemIndicator,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from '@langgenius/dify-ui/dropdown-menu'
+import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
+import { useTheme } from 'next-themes'
+import { useQueryState } from 'nuqs'
+import { useRef, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
-import { resetUser } from '@/app/components/base/amplitude/utils'
-import Avatar from '@/app/components/base/avatar'
 import PremiumBadge from '@/app/components/base/premium-badge'
-import ThemeSwitcher from '@/app/components/base/theme-switcher'
-import { ACCOUNT_SETTING_TAB } from '@/app/components/header/account-setting/constants'
-import { IS_CLOUD_EDITION } from '@/config'
-import { useAppContext } from '@/context/app-context'
-import { useGlobalPublicStore } from '@/context/global-public-context'
-import { useDocLink } from '@/context/i18n'
-import { useModalContext } from '@/context/modal-context'
-import { useProviderContext } from '@/context/provider-context'
+import {
+  settingsQueryParamName,
+  settingsQueryParser,
+} from '@/app/components/header/account-setting/query-params'
+import { userProfileQueryOptions } from '@/features/account-profile/client'
+import Link from '@/next/link'
+import { consoleQuery } from '@/service/console'
 import { useLogout } from '@/service/use-common'
-import { cn } from '@/utils/classnames'
-import AccountAbout from '../account-about'
-import GithubStar from '../github-star'
-import Indicator from '../indicator'
-import Compliance from './compliance'
-import Support from './support'
+import { getAvatarInitial } from '@/utils/avatar'
+import { ExternalLinkIndicator, MenuItemContent } from './menu-item-content'
 
-export default function AppSelector() {
-  const itemClassName = `
-    flex items-center w-full h-8 pl-3 pr-2 text-text-secondary system-md-regular
-    rounded-lg hover:bg-state-base-hover cursor-pointer gap-1
-  `
-  const router = useRouter()
-  const [aboutVisible, setAboutVisible] = useState(false)
-  const { systemFeatures } = useGlobalPublicStore()
+type AccountDropdownProps = {
+  trigger: (props: { ariaLabel: string }) => ReactElement
+}
 
-  const { t } = useTranslation()
-  const docLink = useDocLink()
-  const { userProfile, langGeniusVersionInfo, isCurrentWorkspaceOwner } = useAppContext()
-  const { isEducationAccount } = useProviderContext()
-  const { setShowAccountSettingModal } = useModalContext()
+const mainNavMenuPopupClassName = 'w-60 max-w-80 overflow-hidden p-0'
 
-  const { mutateAsync: logout } = useLogout()
-  const handleLogout = async () => {
-    await logout()
-    resetUser()
-    localStorage.removeItem('setup_status')
-    // Tokens are now stored in cookies and cleared by backend
+const subscribeHydrationState = () => () => {}
+const getHydrationSnapshot = () => false
+const getServerHydrationSnapshot = () => true
 
-    // To avoid use other account's education notice info
-    localStorage.removeItem('education-reverify-prev-expire-at')
-    localStorage.removeItem('education-reverify-has-noticed')
-    localStorage.removeItem('education-expired-has-noticed')
+type MainNavRadioItemContentProps = {
+  iconClassName?: string
+  label: ReactNode
+}
 
-    router.push('/signin')
-  }
+function MainNavRadioItemContent({ iconClassName, label }: MainNavRadioItemContentProps) {
+  const labelTitle = typeof label === 'string' ? label : undefined
 
   return (
-    <div className="">
-      <Menu as="div" className="relative inline-block text-left">
-        {
-          ({ open, close }) => (
-            <>
-              <MenuButton className={cn('inline-flex items-center rounded-[20px] p-0.5 hover:bg-background-default-dodge', open && 'bg-background-default-dodge')}>
-                <Avatar avatar={userProfile.avatar_url} name={userProfile.name} size={36} />
-              </MenuButton>
-              <Transition
-                as={Fragment}
-                enter="transition ease-out duration-100"
-                enterFrom="transform opacity-0 scale-95"
-                enterTo="transform opacity-100 scale-100"
-                leave="transition ease-in duration-75"
-                leaveFrom="transform opacity-100 scale-100"
-                leaveTo="transform opacity-0 scale-95"
+    <>
+      {iconClassName && (
+        <span aria-hidden className={cn('size-4 shrink-0 text-text-tertiary', iconClassName)} />
+      )}
+      <span
+        className="min-w-0 grow truncate px-1 system-md-regular text-text-secondary"
+        title={labelTitle}
+      >
+        {label}
+      </span>
+      <DropdownMenuRadioItemIndicator />
+    </>
+  )
+}
+
+function AppearanceSubmenu() {
+  const { t } = useTranslation(['accountSettings'])
+  const { theme, setTheme } = useTheme()
+  const currentTheme: Theme =
+    theme === 'light' || theme === 'dark' || theme === 'system' ? theme : 'system'
+
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger className="mx-0 px-3 py-1">
+        <MenuItemContent
+          iconClassName="i-ri-sun-line"
+          label={t(($) => $['account.appearanceLabel'], { ns: 'accountSettings' })}
+        />
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent sideOffset={6} className="max-h-90 w-34.75 px-1">
+        <DropdownMenuRadioGroup<Theme>
+          value={currentTheme}
+          onValueChange={(nextTheme) => setTheme(nextTheme)}
+        >
+          <DropdownMenuRadioItem<Theme> value="light" className="mx-0 py-1">
+            <MainNavRadioItemContent
+              iconClassName="i-ri-sun-line"
+              label={t(($) => $['account.appearanceLight'], { ns: 'accountSettings' })}
+            />
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem<Theme> value="dark" className="mx-0 py-1">
+            <MainNavRadioItemContent
+              iconClassName="i-ri-moon-line"
+              label={t(($) => $['account.appearanceDark'], { ns: 'accountSettings' })}
+            />
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem<Theme> value="system" className="mx-0 py-1">
+            <MainNavRadioItemContent
+              iconClassName="i-ri-computer-line"
+              label={t(($) => $['account.appearanceSystem'], { ns: 'accountSettings' })}
+            />
+          </DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  )
+}
+
+type MainNavMenuContentProps = {
+  onLogout: () => void
+}
+
+function MainNavMenuContent({ onLogout }: MainNavMenuContentProps) {
+  const { t } = useTranslation(['common', 'accountSettings', 'navigation'])
+  const { data: userProfile } = useSuspenseQuery({
+    ...userProfileQueryOptions(),
+    select: (data) => data.profile,
+  })
+  const { data: enableEducationPlan } = useQuery(
+    consoleQuery.features.get.queryOptions({
+      select: (features) => features.education.enabled,
+    }),
+  )
+  const { data: isEducationAccount = false } = useQuery(
+    consoleQuery.account.education.get.queryOptions({
+      enabled: enableEducationPlan === true,
+      select: ({ is_student }) => is_student ?? false,
+    }),
+  )
+  const [, setSettingsDestination] = useQueryState(settingsQueryParamName, settingsQueryParser)
+
+  return (
+    <>
+      <DropdownMenuGroup className="p-1">
+        <div className="flex items-center gap-3 rounded-xl bg-linear-to-b from-background-section-burn to-background-section p-3">
+          <div className="flex min-w-0 grow flex-col gap-1">
+            <div className="flex min-w-0 items-center gap-1">
+              <div
+                className="min-w-0 flex-1 truncate body-md-medium text-text-primary"
+                title={userProfile.name}
               >
-                <MenuItems
-                  className="
-                    absolute right-0 mt-1.5 w-60 max-w-80
-                    origin-top-right divide-y divide-divider-subtle rounded-xl bg-components-panel-bg-blur shadow-lg
-                    backdrop-blur-sm focus:outline-none
-                  "
-                >
-                  <div className="px-1 py-1">
-                    <MenuItem disabled>
-                      <div className="flex flex-nowrap items-center py-2 pl-3 pr-2">
-                        <div className="grow">
-                          <div className="system-md-medium break-all text-text-primary">
-                            {userProfile.name}
-                            {isEducationAccount && (
-                              <PremiumBadge size="s" color="blue" className="ml-1 !px-2">
-                                <RiGraduationCapFill className="mr-1 h-3 w-3" />
-                                <span className="system-2xs-medium">EDU</span>
-                              </PremiumBadge>
-                            )}
-                          </div>
-                          <div className="system-xs-regular break-all text-text-tertiary">{userProfile.email}</div>
-                        </div>
-                        <Avatar avatar={userProfile.avatar_url} name={userProfile.name} size={36} />
-                      </div>
-                    </MenuItem>
-                    <MenuItem>
-                      <Link
-                        className={cn(itemClassName, 'group', 'data-[active]:bg-state-base-hover')}
-                        href="/account"
-                        target="_self"
-                        rel="noopener noreferrer"
-                      >
-                        <RiAccountCircleLine className="size-4 shrink-0 text-text-tertiary" />
-                        <div className="system-md-regular grow px-1 text-text-secondary">{t('account.account', { ns: 'common' })}</div>
-                        <RiArrowRightUpLine className="size-[14px] shrink-0 text-text-tertiary" />
-                      </Link>
-                    </MenuItem>
-                    <MenuItem>
-                      <div
-                        className={cn(itemClassName, 'data-[active]:bg-state-base-hover')}
-                        onClick={() => setShowAccountSettingModal({ payload: ACCOUNT_SETTING_TAB.MEMBERS })}
-                      >
-                        <RiSettings3Line className="size-4 shrink-0 text-text-tertiary" />
-                        <div className="system-md-regular grow px-1 text-text-secondary">{t('userProfile.settings', { ns: 'common' })}</div>
-                      </div>
-                    </MenuItem>
-                  </div>
-                  {!systemFeatures.branding.enabled && (
-                    <>
-                      <div className="p-1">
-                        <MenuItem>
-                          <Link
-                            className={cn(itemClassName, 'group justify-between', 'data-[active]:bg-state-base-hover')}
-                            href={docLink('/use-dify/getting-started/introduction')}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            <RiBookOpenLine className="size-4 shrink-0 text-text-tertiary" />
-                            <div className="system-md-regular grow px-1 text-text-secondary">{t('userProfile.helpCenter', { ns: 'common' })}</div>
-                            <RiArrowRightUpLine className="size-[14px] shrink-0 text-text-tertiary" />
-                          </Link>
-                        </MenuItem>
-                        <Support closeAccountDropdown={close} />
-                        {IS_CLOUD_EDITION && isCurrentWorkspaceOwner && <Compliance />}
-                      </div>
-                      <div className="p-1">
-                        <MenuItem>
-                          <Link
-                            className={cn(itemClassName, 'group justify-between', 'data-[active]:bg-state-base-hover')}
-                            href="https://roadmap.dify.ai"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            <RiMap2Line className="size-4 shrink-0 text-text-tertiary" />
-                            <div className="system-md-regular grow px-1 text-text-secondary">{t('userProfile.roadmap', { ns: 'common' })}</div>
-                            <RiArrowRightUpLine className="size-[14px] shrink-0 text-text-tertiary" />
-                          </Link>
-                        </MenuItem>
-                        <MenuItem>
-                          <Link
-                            className={cn(itemClassName, 'group justify-between', 'data-[active]:bg-state-base-hover')}
-                            href="https://github.com/langgenius/dify"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            <RiGithubLine className="size-4 shrink-0 text-text-tertiary" />
-                            <div className="system-md-regular grow px-1 text-text-secondary">{t('userProfile.github', { ns: 'common' })}</div>
-                            <div className="flex items-center gap-0.5 rounded-[5px] border border-divider-deep bg-components-badge-bg-dimm px-[5px] py-[3px]">
-                              <RiStarLine className="size-3 shrink-0 text-text-tertiary" />
-                              <GithubStar className="system-2xs-medium-uppercase text-text-tertiary" />
-                            </div>
-                          </Link>
-                        </MenuItem>
-                        {
-                          document?.body?.getAttribute('data-public-site-about') !== 'hide' && (
-                            <MenuItem>
-                              <div
-                                className={cn(itemClassName, 'justify-between', 'data-[active]:bg-state-base-hover')}
-                                onClick={() => setAboutVisible(true)}
-                              >
-                                <RiInformation2Line className="size-4 shrink-0 text-text-tertiary" />
-                                <div className="system-md-regular grow px-1 text-text-secondary">{t('userProfile.about', { ns: 'common' })}</div>
-                                <div className="flex shrink-0 items-center">
-                                  <div className="system-xs-regular mr-2 text-text-tertiary">{langGeniusVersionInfo.current_version}</div>
-                                  <Indicator color={langGeniusVersionInfo.current_version === langGeniusVersionInfo.latest_version ? 'green' : 'orange'} />
-                                </div>
-                              </div>
-                            </MenuItem>
-                          )
-                        }
-                      </div>
-                    </>
-                  )}
-                  <MenuItem disabled>
-                    <div className="p-1">
-                      <div className={cn(itemClassName, 'hover:bg-transparent')}>
-                        <RiTShirt2Line className="size-4 shrink-0 text-text-tertiary" />
-                        <div className="system-md-regular grow px-1 text-text-secondary">{t('theme.theme', { ns: 'common' })}</div>
-                        <ThemeSwitcher />
-                      </div>
-                    </div>
-                  </MenuItem>
-                  <MenuItem>
-                    <div className="p-1" onClick={() => handleLogout()}>
-                      <div
-                        className={cn(itemClassName, 'group justify-between', 'data-[active]:bg-state-base-hover')}
-                      >
-                        <RiLogoutBoxRLine className="size-4 shrink-0 text-text-tertiary" />
-                        <div className="system-md-regular grow px-1 text-text-secondary">{t('userProfile.logout', { ns: 'common' })}</div>
-                      </div>
-                    </div>
-                  </MenuItem>
-                </MenuItems>
-              </Transition>
-            </>
-          )
-        }
-      </Menu>
-      {
-        aboutVisible && <AccountAbout onCancel={() => setAboutVisible(false)} langGeniusVersionInfo={langGeniusVersionInfo} />
-      }
+                {userProfile.name}
+              </div>
+              {isEducationAccount && (
+                <PremiumBadge size="s" color="blue" className="shrink-0 px-2!">
+                  <span aria-hidden className="me-1 i-ri-graduation-cap-fill size-3" />
+                  <span className="system-2xs-medium">EDU</span>
+                </PremiumBadge>
+              )}
+            </div>
+            <div
+              className="truncate system-xs-regular text-text-tertiary"
+              title={userProfile.email}
+            >
+              {userProfile.email}
+            </div>
+          </div>
+          <Avatar size="lg" className="shrink-0" aria-hidden="true">
+            <AvatarFallback>{getAvatarInitial(userProfile.name)}</AvatarFallback>
+            <AvatarImage src={userProfile.avatar_url || undefined} alt="" />
+          </Avatar>
+        </div>
+      </DropdownMenuGroup>
+      <DropdownMenuGroup className="p-1">
+        <DropdownMenuLinkItem
+          className="mx-0 justify-between px-3 py-1"
+          render={<Link href="/account" />}
+        >
+          <MenuItemContent
+            iconClassName="i-ri-account-circle-line"
+            label={t(($) => $['account.account'], { ns: 'accountSettings' })}
+            trailing={<ExternalLinkIndicator />}
+          />
+        </DropdownMenuLinkItem>
+        <DropdownMenuItem
+          className="mx-0 px-3 py-1"
+          onClick={() => setSettingsDestination('preferences')}
+        >
+          <MenuItemContent
+            iconClassName="i-ri-equalizer-2-line"
+            label={t(($) => $['settings.preferences'], { ns: 'navigation' })}
+          />
+        </DropdownMenuItem>
+        <AppearanceSubmenu />
+      </DropdownMenuGroup>
+      <DropdownMenuSeparator className="my-0" />
+      <DropdownMenuGroup className="p-1">
+        <DropdownMenuItem
+          className="mx-0 px-3 py-1"
+          onClick={() => {
+            onLogout()
+          }}
+        >
+          <MenuItemContent
+            iconClassName="i-ri-shut-down-line"
+            label={t(($) => $['userProfile.logout'], { ns: 'common' })}
+          />
+        </DropdownMenuItem>
+      </DropdownMenuGroup>
+    </>
+  )
+}
+
+export default function AccountDropdown({ trigger }: AccountDropdownProps) {
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const popupRef = useRef<HTMLDivElement>(null)
+  const keyboardNavigationRef = useRef(false)
+  const isHydrating = useSyncExternalStore(
+    subscribeHydrationState,
+    getHydrationSnapshot,
+    getServerHydrationSnapshot,
+  )
+  const { t } = useTranslation(['accountSettings'])
+
+  const { mutate: logout } = useLogout()
+
+  return (
+    <div>
+      <DropdownMenu
+        onOpenChange={(open, { event }) => {
+          if (open)
+            keyboardNavigationRef.current =
+              event.type.startsWith('key') ||
+              (event.type === 'click' && 'detail' in event && event.detail === 0)
+        }}
+      >
+        <DropdownMenuTrigger
+          ref={triggerRef}
+          onKeyDownCapture={(event) => {
+            if (event.key !== 'Escape') keyboardNavigationRef.current = true
+          }}
+          disabled={isHydrating}
+          render={trigger({
+            ariaLabel: t(($) => $['account.account'], { ns: 'accountSettings' }),
+          })}
+        />
+        <DropdownMenuContent
+          ref={popupRef}
+          onKeyDownCapture={(event) => {
+            if (event.key !== 'Escape') keyboardNavigationRef.current = true
+          }}
+          finalFocus={(interactionType) => {
+            const canRestoreFocus = () => {
+              const activeElement = document.activeElement
+              return (
+                activeElement === document.body ||
+                activeElement === triggerRef.current ||
+                !!popupRef.current?.contains(activeElement)
+              )
+            }
+            if (
+              interactionType === 'touch' ||
+              interactionType === '' ||
+              (interactionType === 'keyboard' && keyboardNavigationRef.current)
+            )
+              return canRestoreFocus()
+            // Restore after dismissal, respecting focus moved into a destination dialog.
+            queueMicrotask(() => {
+              if (!canRestoreFocus()) return
+              const triggerElement = triggerRef.current
+              // Focusing an already focused element does not update its focus-visible state.
+              if (
+                document.activeElement === triggerElement &&
+                triggerElement?.matches(':focus-visible')
+              )
+                triggerElement.blur()
+              triggerElement?.focus({ preventScroll: true, focusVisible: false })
+            })
+            return false
+          }}
+          side="top"
+          align="start"
+          sideOffset={6}
+          alignOffset={4}
+          className={mainNavMenuPopupClassName}
+        >
+          <MainNavMenuContent onLogout={() => logout()} />
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   )
 }

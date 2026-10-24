@@ -1,39 +1,42 @@
 'use client'
 import type { FC } from 'react'
+import { Button } from '@langgenius/dify-ui/button'
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@langgenius/dify-ui/dialog'
+import { Field, FieldLabel } from '@langgenius/dify-ui/field'
+import { Form } from '@langgenius/dify-ui/form'
+import { Input } from '@langgenius/dify-ui/input'
 import { useBoolean } from 'ahooks'
 import * as React from 'react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import Button from '@/app/components/base/button'
-import Input from '@/app/components/base/input'
-import Modal from '@/app/components/base/modal'
-import Toast from '@/app/components/base/toast'
+import { toast } from '@/app/notifications'
 import { renameDocumentName } from '@/service/datasets'
 
-type Props = {
+type Props = Readonly<{
   datasetId: string
   documentId: string
   name: string
   onClose: () => void
   onSaved: () => void
-}
+}>
 
-const RenameModal: FC<Props> = ({
-  documentId,
-  datasetId,
-  name,
-  onClose,
-  onSaved,
-}) => {
-  const { t } = useTranslation()
+const RenameModal: FC<Props> = ({ documentId, datasetId, name, onClose, onSaved }) => {
+  const { t } = useTranslation(['common', 'datasetDocuments'])
 
   const [newName, setNewName] = useState(name)
-  const [saveLoading, {
-    setTrue: setSaveLoadingTrue,
-    setFalse: setSaveLoadingFalse,
-  }] = useBoolean(false)
+  const [saveLoading, { setTrue: setSaveLoadingTrue, setFalse: setSaveLoadingFalse }] =
+    useBoolean(false)
 
   const handleSave = async () => {
+    if (saveLoading) return
+
     setSaveLoadingTrue()
     try {
       await renameDocumentName({
@@ -41,37 +44,51 @@ const RenameModal: FC<Props> = ({
         documentId,
         name: newName,
       })
-      Toast.notify({ type: 'success', message: t('actionMsg.modifiedSuccessfully', { ns: 'common' }) })
       onSaved()
       onClose()
-    }
-    catch (error) {
-      if (error)
-        Toast.notify({ type: 'error', message: error.toString() })
-    }
-    finally {
+    } catch (error) {
+      if (error) toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
       setSaveLoadingFalse()
     }
   }
 
   return (
-    <Modal
-      title={t('list.table.rename', { ns: 'datasetDocuments' })}
-      isShow
-      onClose={onClose}
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose()
+      }}
     >
-      <div className="mt-6 text-sm font-medium leading-[21px] text-text-primary">{t('list.table.name', { ns: 'datasetDocuments' })}</div>
-      <Input
-        className="mt-2 h-10"
-        value={newName}
-        onChange={e => setNewName(e.target.value)}
-      />
-
-      <div className="mt-10 flex justify-end">
-        <Button className="mr-2 shrink-0" onClick={onClose}>{t('operation.cancel', { ns: 'common' })}</Button>
-        <Button variant="primary" className="shrink-0" onClick={handleSave} loading={saveLoading}>{t('operation.save', { ns: 'common' })}</Button>
-      </div>
-    </Modal>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t(($) => $['list.table.rename'], { ns: 'datasetDocuments' })}</DialogTitle>
+        </DialogHeader>
+        <Form className="contents" onFormSubmit={() => void handleSave()}>
+          <DialogBody>
+            <Field name="documentName">
+              <FieldLabel className="text-sm leading-5.25 font-medium text-text-primary">
+                {t(($) => $['list.table.name'], { ns: 'datasetDocuments' })}
+              </FieldLabel>
+              <Input
+                className="h-10"
+                value={newName}
+                placeholder={t(($) => $['placeholder.input'], { ns: 'common' }) || ''}
+                onValueChange={setNewName}
+              />
+            </Field>
+          </DialogBody>
+          <DialogFooter>
+            <Button type="button" className="shrink-0" onClick={onClose}>
+              {t(($) => $['operation.cancel'], { ns: 'common' })}
+            </Button>
+            <Button type="submit" variant="primary" className="shrink-0" loading={saveLoading}>
+              {t(($) => $['operation.save'], { ns: 'common' })}
+            </Button>
+          </DialogFooter>
+        </Form>
+      </DialogContent>
+    </Dialog>
   )
 }
 export default React.memo(RenameModal)

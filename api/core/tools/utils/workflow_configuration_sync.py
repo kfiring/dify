@@ -1,9 +1,9 @@
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from core.app.app_config.entities import VariableEntity
 from core.tools.entities.tool_entities import WorkflowToolParameterConfiguration
-from core.workflow.nodes.base.entities import OutputVariableEntity
+from graphon.nodes.base.entities import OutputVariableEntity
+from graphon.variables.input_entities import VariableEntity
 
 
 class WorkflowToolConfigurationUtils:
@@ -14,10 +14,8 @@ class WorkflowToolConfigurationUtils:
         """
         nodes = graph.get("nodes", [])
         start_node = next(filter(lambda x: x.get("data", {}).get("type") == "start", nodes), None)
-
         if not start_node:
             return []
-
         return [VariableEntity.model_validate(variable) for variable in start_node.get("data", {}).get("variables", [])]
 
     @classmethod

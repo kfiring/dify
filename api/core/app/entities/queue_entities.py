@@ -5,11 +5,13 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from core.model_runtime.entities.llm_entities import LLMResult, LLMResultChunk
-from core.rag.entities.citation_metadata import RetrievalSourceMetadata
-from core.workflow.entities import AgentNodeStrategyInit
-from core.workflow.enums import WorkflowNodeExecutionMetadataKey
-from core.workflow.nodes import NodeType
+from core.app.entities.agent_strategy import AgentStrategyInfo
+from core.rag.entities import RetrievalSourceMetadata
+from core.workflow.nodes.human_input.pause_reason import PauseReason
+from graphon.entities import WorkflowStartReason
+from graphon.enums import NodeType, WorkflowNodeExecutionMetadataKey
+from graphon.model_runtime.entities.llm_entities import LLMResult, LLMResultChunk
+from graphon.variables.segments import Segment
 
 
 class QueueEvent(StrEnum):
@@ -38,6 +40,7 @@ class QueueEvent(StrEnum):
     NODE_FAILED = "node_failed"
     NODE_EXCEPTION = "node_exception"
     RETRIEVER_RESOURCES = "retriever_resources"
+    REASONING_CHUNK = "reasoning_chunk"
     ANNOTATION_REPLY = "annotation_reply"
     AGENT_THOUGHT = "agent_thought"
     MESSAGE_FILE = "message_file"
@@ -46,6 +49,9 @@ class QueueEvent(StrEnum):
     PING = "ping"
     STOP = "stop"
     RETRY = "retry"
+    PAUSE = "pause"
+    HUMAN_INPUT_FORM_FILLED = "human_input_form_filled"
+    HUMAN_INPUT_FORM_TIMEOUT = "human_input_form_timeout"
 
 
 class AppQueueEvent(BaseModel):
@@ -79,7 +85,6 @@ class QueueIterationStartEvent(AppQueueEvent):
     node_title: str
     start_at: datetime
 
-    node_run_index: int
     inputs: Mapping[str, object] = Field(default_factory=dict)
     metadata: Mapping[str, object] = Field(default_factory=dict)
 
@@ -96,7 +101,6 @@ class QueueIterationNextEvent(AppQueueEvent):
     node_id: str
     node_type: NodeType
     node_title: str
-    node_run_index: int
     output: Any = None  # output for the current iteration
 
 
@@ -113,7 +117,6 @@ class QueueIterationCompletedEvent(AppQueueEvent):
     node_title: str
     start_at: datetime
 
-    node_run_index: int
     inputs: Mapping[str, object] = Field(default_factory=dict)
     outputs: Mapping[str, object] = Field(default_factory=dict)
     metadata: Mapping[str, object] = Field(default_factory=dict)
@@ -134,7 +137,6 @@ class QueueLoopStartEvent(AppQueueEvent):
     node_title: str
     start_at: datetime
 
-    node_run_index: int
     inputs: Mapping[str, object] = Field(default_factory=dict)
     metadata: Mapping[str, object] = Field(default_factory=dict)
 
@@ -151,7 +153,6 @@ class QueueLoopNextEvent(AppQueueEvent):
     node_id: str
     node_type: NodeType
     node_title: str
-    node_run_index: int
     output: Any = None  # output for the current loop
 
 
@@ -168,7 +169,6 @@ class QueueLoopCompletedEvent(AppQueueEvent):
     node_title: str
     start_at: datetime
 
-    node_run_index: int
     inputs: Mapping[str, object] = Field(default_factory=dict)
     outputs: Mapping[str, object] = Field(default_factory=dict)
     metadata: Mapping[str, object] = Field(default_factory=dict)
@@ -186,6 +186,26 @@ class QueueTextChunkEvent(AppQueueEvent):
     text: str
     from_variable_selector: list[str] | None = None
     """from variable selector"""
+    in_iteration_id: str | None = None
+    """iteration id if node is in iteration"""
+    in_loop_id: str | None = None
+    """loop id if node is in loop"""
+
+
+class QueueReasoningChunkEvent(AppQueueEvent):
+    """
+    QueueReasoningChunkEvent entity
+
+    Out-of-band reasoning (chain-of-thought) delta from an LLM node in "separated"
+    mode. It never touches the answer; it is emitted on a dedicated channel.
+    """
+
+    event: QueueEvent = QueueEvent.REASONING_CHUNK
+    reasoning: str
+    from_node_id: str | None = None
+    """id of the LLM node that produced this reasoning"""
+    is_final: bool = False
+    """marks the terminal reasoning chunk for the node run (may carry empty reasoning)"""
     in_iteration_id: str | None = None
     """iteration id if node is in iteration"""
     in_loop_id: str | None = None
@@ -257,10 +277,24 @@ class QueueAdvancedChatMessageEndEvent(AppQueueEvent):
     event: QueueEvent = QueueEvent.ADVANCED_CHAT_MESSAGE_END
 
 
+class NodeExecutionSnapshot(BaseModel):
+    """Materialized node metadata supplied by the run owner when resuming streaming."""
+
+    execution_id: str
+    title: str
+    index: int
+    start_at: datetime
+    iteration_id: str = ""
+    loop_id: str = ""
+
+
 class QueueWorkflowStartedEvent(AppQueueEvent):
     """QueueWorkflowStartedEvent entity."""
 
     event: QueueEvent = QueueEvent.WORKFLOW_STARTED
+    # Always present; mirrors GraphRunStartedEvent.reason for downstream consumers.
+    reason: WorkflowStartReason = WorkflowStartReason.INITIAL
+    node_execution_snapshots: tuple[NodeExecutionSnapshot, ...] = ()
 
 
 class QueueWorkflowSucceededEvent(AppQueueEvent):
@@ -303,11 +337,11 @@ class QueueNodeStartedEvent(AppQueueEvent):
     node_id: str
     node_title: str
     node_type: NodeType
-    node_run_index: int = 1  # FIXME(-LAN-): may not used
+    node_run_index: int = 1
     in_iteration_id: str | None = None
     in_loop_id: str | None = None
     start_at: datetime
-    agent_strategy: AgentNodeStrategyInit | None = None
+    agent_strategy: AgentStrategyInfo | None = None
 
     # FIXME(-LAN-): only for ToolNode, need to refactor
     provider_type: str  # should be a core.tools.entities.tool_entities.ToolProviderType
@@ -329,6 +363,7 @@ class QueueNodeSucceededEvent(AppQueueEvent):
     in_loop_id: str | None = None
     """loop id if node is in loop"""
     start_at: datetime
+    finished_at: datetime | None = None
 
     inputs: Mapping[str, object] = Field(default_factory=dict)
     process_data: Mapping[str, object] = Field(default_factory=dict)
@@ -384,6 +419,7 @@ class QueueNodeExceptionEvent(AppQueueEvent):
     in_loop_id: str | None = None
     """loop id if node is in loop"""
     start_at: datetime
+    finished_at: datetime | None = None
 
     inputs: Mapping[str, object] = Field(default_factory=dict)
     process_data: Mapping[str, object] = Field(default_factory=dict)
@@ -408,6 +444,7 @@ class QueueNodeFailedEvent(AppQueueEvent):
     in_loop_id: str | None = None
     """loop id if node is in loop"""
     start_at: datetime
+    finished_at: datetime | None = None
 
     inputs: Mapping[str, object] = Field(default_factory=dict)
     process_data: Mapping[str, object] = Field(default_factory=dict)
@@ -469,11 +506,15 @@ class QueueStopEvent(AppQueueEvent):
 
     event: QueueEvent = QueueEvent.STOP
     stopped_by: StopBy
+    reason: str | None = None
 
     def get_stop_reason(self) -> str:
         """
         To stop reason
         """
+        if self.reason:
+            return self.reason
+
         reason_mapping = {
             QueueStopEvent.StopBy.USER_MANUAL: "Stopped by user.",
             QueueStopEvent.StopBy.ANNOTATION_REPLY: "Stopped by annotation reply.",
@@ -482,6 +523,40 @@ class QueueStopEvent(AppQueueEvent):
         }
 
         return reason_mapping.get(self.stopped_by, "Stopped by unknown reason.")
+
+
+class QueueHumanInputFormFilledEvent(AppQueueEvent):
+    """
+    QueueHumanInputFormFilledEvent entity
+    """
+
+    event: QueueEvent = QueueEvent.HUMAN_INPUT_FORM_FILLED
+
+    form_id: str
+    node_id: str
+    node_type: NodeType
+    node_title: str
+    rendered_content: str
+    action_id: str
+    action_text: str
+
+    # Keep the field name aligned with Graphon so the app-layer bridge does not
+    # need to translate between two equivalent payload names.
+    submitted_data: Mapping[str, Segment] | None = None
+
+
+class QueueHumanInputFormTimeoutEvent(AppQueueEvent):
+    """
+    QueueHumanInputFormTimeoutEvent entity
+    """
+
+    event: QueueEvent = QueueEvent.HUMAN_INPUT_FORM_TIMEOUT
+
+    form_id: str
+    node_id: str
+    node_type: NodeType
+    node_title: str
+    expiration_time: datetime
 
 
 class QueueMessage(BaseModel):
@@ -509,3 +584,14 @@ class WorkflowQueueMessage(QueueMessage):
     """
 
     pass
+
+
+class QueueWorkflowPausedEvent(AppQueueEvent):
+    """
+    QueueWorkflowPausedEvent entity
+    """
+
+    event: QueueEvent = QueueEvent.PAUSE
+    reasons: Sequence[PauseReason] = Field(default_factory=list)
+    outputs: Mapping[str, object] = Field(default_factory=dict)
+    paused_nodes: Sequence[str] = Field(default_factory=list)
