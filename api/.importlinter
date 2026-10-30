@@ -29,6 +29,12 @@ layers =
 # error makes this list shrink whenever a legacy dependency is removed.
 unmatched_ignore_imports_alerting = error
 ignore_imports =
+    # The Dify node factory composes the Human Input runtime for workflow execution.
+    core.workflow.node_factory -> services.human_input_v2.composition
+    # Legacy generators delegate configured file defaults to the application owner during core migration.
+    core.app.apps.base_app_generator -> services.app.file_input_defaults
+    core.app.apps.advanced_chat.app_generator -> services.app.file_input_defaults
+    core.app.apps.workflow.app_generator -> services.app.file_input_defaults
     core.app.app_config.easy_ui_based_app.dataset.manager -> services.knowledge.dataset_service
     core.app.apps.advanced_chat.app_generator -> controllers.console.app.workflow
     core.app.apps.advanced_chat.app_generator -> services.conversation_service
@@ -398,11 +404,11 @@ forbidden_modules =
     sqlalchemy
     werkzeug
 
-[importlinter:contract:installed-app-message-boundary]
-name = Installed app message service is framework and persistence neutral
+[importlinter:contract:message-query-boundary]
+name = Message query service is framework and persistence neutral
 type = forbidden
 source_modules =
-    services.installed_app_message_service
+    services.message_query_service
 forbidden_modules =
     controllers
     extensions
@@ -412,20 +418,11 @@ forbidden_modules =
     sqlalchemy
     werkzeug
 
-[importlinter:contract:installed-app-message-persistence-boundary]
-name = Installed app message persistence does not call the legacy message service
-type = forbidden
-source_modules =
-    repositories.installed_app_message_repository
-forbidden_modules =
-    services.message_service
-allow_indirect_imports = True
-
 [importlinter:contract:conversation-persistence-boundary]
 name = Conversation persistence does not call legacy conversation or workspace services
 type = forbidden
 source_modules =
-    repositories.installed_app_conversation_repository
+    repositories.conversation_repository
     repositories.conversation_lifecycle
     repositories.agent_workspace_repository
 forbidden_modules =
@@ -1007,12 +1004,11 @@ forbidden_modules =
     flask
     models
     repositories
-    services.message_service
     sqlalchemy
     werkzeug
 
 [importlinter:contract:message-suggested-questions-legacy-boundary]
-name = Suggested questions do not return to the legacy message or generation service
+name = Suggested questions do not return to the legacy generation service
 type = forbidden
 source_modules =
     services.message_suggested_questions_service
@@ -1020,7 +1016,6 @@ source_modules =
     services.message_suggested_questions_generator
     repositories.message_repository
 forbidden_modules =
-    services.message_service
     services.app_generate_service
 allow_indirect_imports = True
 
@@ -1049,6 +1044,37 @@ forbidden_modules =
     repositories
     sqlalchemy
     werkzeug
+
+[importlinter:contract:conversation-name-boundary]
+name = Conversation application services are framework and persistence neutral
+type = forbidden
+source_modules =
+    services.conversation_name_service
+    services.conversation_command_service
+    services.conversation_query_service
+    services.conversation_variable_command_service
+forbidden_modules =
+    controllers
+    extensions
+    flask
+    models
+    repositories
+    services.conversation_service
+    sqlalchemy
+    werkzeug
+
+[importlinter:contract:console-conversation-controller-boundary]
+name = Console conversation controllers reach persistence through the composition root
+type = forbidden
+source_modules =
+    controllers.console.app.conversation
+forbidden_modules =
+    extensions.ext_database
+    models
+    repositories
+    services.conversation_service
+    sqlalchemy
+allow_indirect_imports = True
 
 [importlinter:contract:billing-application-boundary]
 name = Billing application services and ports are framework and infrastructure neutral
@@ -1254,4 +1280,22 @@ forbidden_modules =
     repositories
     services.account.adapters
     sqlalchemy
+    werkzeug
+
+[importlinter:contract:annotation-application-boundary]
+name = Annotation application services and contracts are framework and persistence neutral
+type = forbidden
+source_modules =
+    services.annotation_query
+    services.annotation_command_service
+    services.annotation_import_service
+    services.annotation_reply_service
+forbidden_modules =
+    controllers
+    extensions
+    flask
+    models
+    repositories
+    sqlalchemy
+    tasks
     werkzeug
