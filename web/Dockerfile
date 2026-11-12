@@ -1,5 +1,7 @@
 # base image
 ARG NODE_VERSION=24.22.1
+ARG NPM_SOURCE_URL=https://registry.npmmirror.com
+
 FROM node:${NODE_VERSION}-alpine AS base
 LABEL maintainer="takatost@gmail.com"
 
@@ -8,6 +10,7 @@ LABEL maintainer="takatost@gmail.com"
 
 # if you located in China, you can use taobao registry to speed up
 # RUN npm config set registry https://registry.npmmirror.com
+RUN npm config set registry ${NPM_SOURCE_URL}
 
 RUN apk add --no-cache tzdata
 RUN corepack enable

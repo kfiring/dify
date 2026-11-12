@@ -7,10 +7,14 @@
 # ── Go build stage ───────────────────────────────────────────────────────────
 FROM golang:1.26 AS go-builder
 
+ENV GO111MODULE=on
+ENV GOPROXY=https://goproxy.cn,direct
+
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
+
 RUN CGO_ENABLED=0 go build -o /bin/shellctl ./cmd/shellctl && \
     CGO_ENABLED=0 go build -o /bin/shellctl-sanitize-pty ./cmd/sanitize-pty && \
     CGO_ENABLED=0 go build -o /bin/shellctl-runner-exit ./cmd/runner-exit && \
@@ -23,10 +27,16 @@ FROM python:3.13-slim-bookworm AS production
 ARG NODE_VERSION=24.22.1
 ARG PNPM_VERSION=11.9.0
 ARG UV_VERSION=0.13.4
+ARG APT_SOURCE_URL=mirrors.tuna.tsinghua.edu.cn
+ARG PIP_SOURCE_URL=pypi.tuna.tsinghua.edu.cn
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    PIP_INDEX_URL=https://${PIP_SOURCE_URL}/simple 
+
+RUN sed -i "s/deb.debian.org/${APT_SOURCE_URL}/g" /etc/apt/sources.list.d/debian.sources \
+    && sed -i "s/security.debian.org/${APT_SOURCE_URL}/g" /etc/apt/sources.list.d/debian.sources
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \

@@ -17,8 +17,12 @@ FROM python:3.13-slim-trixie AS base
 
 WORKDIR /app/api
 
+ARG PIP_SOURCE_URL=pypi.tuna.tsinghua.edu.cn
+
 # Install uv
-ENV UV_VERSION=0.13.4
+ENV UV_VERSION=0.13.4 \
+    PIP_INDEX_URL=https://${PIP_SOURCE_URL}/simple \
+    PIP_NO_CACHE_DIR=1
 
 RUN pip install --no-cache-dir uv==${UV_VERSION}
 

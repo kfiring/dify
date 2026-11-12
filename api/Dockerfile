@@ -6,6 +6,17 @@ FROM python:3.13-slim-bookworm AS base
 
 WORKDIR /app/api
 
+ARG APT_SOURCE_URL=mirrors.tuna.tsinghua.edu.cn
+ARG PIP_SOURCE_URL=pypi.tuna.tsinghua.edu.cn
+
+# set apt source 
+RUN sed -i "s/deb.debian.org/${APT_SOURCE_URL}/g" /etc/apt/sources.list.d/debian.sources \
+    && sed -i "s/security.debian.org/${APT_SOURCE_URL}/g" /etc/apt/sources.list.d/debian.sources
+
+# set pip source
+ENV PIP_INDEX_URL=https://${PIP_SOURCE_URL}/simple \
+    PIP_NO_CACHE_DIR=1
+
 # Install uv
 ENV UV_VERSION=0.13.4
 
